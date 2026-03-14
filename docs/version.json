@@ -1,0 +1,8 @@
+{
+  "versionCode": 7,
+  "versionName": "2.9.0",
+  "minVersionCode": 1,
+  "apkUrl": "https://cattowel39200.github.io/MukbangRoulette/app-release.apk",
+  "releaseNotes": "맛집 우선순위 추천 개선\n- 인기/평점 기반 정렬로 변경\n- 검색 범위 확대",
+  "forceUpdate": false
+}

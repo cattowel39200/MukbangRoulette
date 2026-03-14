@@ -1,0 +1,23 @@
+# Gradle
+.gradle/
+build/
+app/build/
+
+# Local configuration
+local.properties
+
+# IDE
+.idea/
+*.iml
+
+# Signing keys
+*.jks
+*.keystore
+
+# Old releases at root
+/*.apk
+/*.aab
+
+# OS
+.DS_Store
+Thumbs.db

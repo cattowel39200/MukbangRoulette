@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>오늘 뭐 먹지?</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{min-height:100vh;min-height:100dvh;background:#0a0a1a;font-family:-apple-system,'Noto Sans KR',sans-serif;color:#fff;overflow-x:hidden;user-select:none}
+::-webkit-scrollbar{display:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+@keyframes pu{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+@keyframes sh{0%{background-position:-200% center}100%{background-position:200% center}}
+@keyframes fl{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes fU{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes cF{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
+.b{border:none;outline:none;cursor:pointer;-webkit-tap-highlight-color:transparent}.b:active{transform:scale(.94)!important}
+#cb{position:fixed;inset:0;pointer-events:none;z-index:100}
+.cf{position:absolute;top:-15px;animation:cF 2s ease-in forwards}
+.ld{width:36px;height:36px;border:3px solid #333;border-top-color:#FFD700;border-radius:50%;animation:sp .7s linear infinite;margin:12px auto}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal-box{background:#1a1a2e;border-radius:16px;padding:20px;max-width:340px;width:100%;max-height:80vh;overflow-y:auto}
+#rmap{width:100%;height:200px;border-radius:12px;margin-top:10px;position:relative;z-index:0}
+.leaflet-control-attribution{font-size:7px!important;background:rgba(0,0,0,.5)!important;color:#888!important}
+.leaflet-control-attribution a{color:#aaa!important}
+input[type=text]{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #333;background:#111;color:#fff;font-size:13px;outline:none}
+input[type=text]:focus{border-color:#FFD700}
+</style>
+</head>
+<body>
+<div id="cb"></div>
+<div id="app"></div>
+<div id="modal"></div>
+<script>
+var APP_NAME='MukbangRoulette',APP_VER='2.9.0',APP_VCODE=7;
+var UPDATE_URL='https://cattowel39200.github.io/MukbangRoulette/version.json';
+var DOWNLOAD_URL='https://cattowel39200.github.io/MukbangRoulette/';
+function _log(m){try{console.log('[APP]'+m)}catch(e){}}
+function esc(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):''}
+function isOnline(){if(typeof Android!=='undefined'&&Android.isOnline)try{return Android.isOnline()}catch(e){}return navigator.onLine!==false}
+function hav(a,b,c,d){var R=6371e3,p=Math.PI/180,x=Math.sin((c-a)*p/2),y=Math.sin((d-b)*p/2);return R*2*Math.asin(Math.sqrt(x*x+Math.cos(a*p)*Math.cos(c*p)*y*y))}
+
+// ═══ Base64 디코드 ═══
+function b64decode(s){try{return decodeURIComponent(escape(atob(s)))}catch(e){try{return atob(s)}catch(e2){return''}}}
+
+// ═══════════════════════════════════════
+// 카카오 카테고리 → 분류 매핑
+// ═══════════════════════════════════════
+var MIC={"고기":"🥩","면류":"🍜","국/탕":"🍲","치킨":"🍗","돈까스":"🍱","회/초밥":"🍣","해산물":"🦀","피자/파스타":"🍕","족발/보쌈":"🦶","버거":"🍔","백반":"🍚","분식":"🧆","중식":"🥟","카레":"🍛","기타":"🍽️"};
+var COL=["#E74C3C","#E67E22","#D4A017","#2ECC71","#1ABC9C","#3498DB","#9B59B6","#E91E63","#FF5722","#795548","#607D8B","#00BCD4","#FF6F61","#6B5B95","#88B04B","#F7CAC9","#92A8D1","#955251","#B565A7","#009B77"];
+
+// 카카오 category_name → {cu, mu}
+function classifyKakao(cat,name){
+  cat=cat||'';name=name||'';var cn=cat+' '+name;
+  var cu='한식',mu='기타';
+  // 카테고리 기반 (가장 정확)
+  if(/양식/.test(cat))cu='양식';
+  else if(/일식/.test(cat))cu='일식';
+  else if(/중식/.test(cat))cu='중식';
+  else if(/분식/.test(cat)){cu='분식';mu='분식'}
+  else if(/인도/.test(cat))cu='기타';
+  // 세부 메뉴 — cat+name 통합 매칭으로 정확도 향상
+  if(/육류|고기|구이|삼겹|갈비|곱창|막창/.test(cat)||/삼겹|갈비|불고기|고기|한우|돼지|구이|곱창|막창|대패|숯불|연탄|양고기|lamb|스테이크|steak|소고기|목살|항정살|차돌|뒷고기|흑돼지|생고기|왕갈비|갈매기살|꽃등심|안심|등심|양념갈비|소갈비|돼갈비|육회|bbq/i.test(name))mu='고기';
+  else if(/국수|면/.test(cat)||/국수|칼국수|냉면|막국수|밀면|라멘|ramen|우동|소바|soba|쌀국수|pho|짬뽕|잔치국수|비빔국수|쫄면|메밀|모밀/i.test(name))mu='면류';
+  else if(/국밥|탕|찌개|전골/.test(cat)||/국밥|해장|감자탕|설렁탕|곰탕|찌개|부대|육개장|삼계탕|매운탕|수육국밥|뼈해장|선지|내장탕|갈비탕|추어탕|도가니|사골|순댓국|뚝배기|된장|김치찌개|청국장|순두부/i.test(name))mu='국/탕';
+  else if(/치킨|닭/.test(cat)||/치킨|통닭|닭강정|찜닭|닭발|닭볶음탕|닭갈비|치맥|fried.*chicken|chicken/i.test(name))mu='치킨';
+  else if(/돈까스|돈가스|카츠/.test(cat)||/돈까스|돈가스|카츠|커틀렛|cutlet|텐동|경양식|토ンカ/i.test(name))mu='돈까스';
+  else if(/초밥|회/.test(cat)||/초밥|스시|sushi|횟집|회센터|사시미|sashimi|오마카세|omakase|활어|광어|연어|참치회/i.test(name))mu='회/초밥';
+  else if(/해물|해산물|수산/.test(cat)||/수산|해산물|조개|대게|게장|조개구이|굴|새우|랍스터|lobster|꽃게|킹크랩|전복|가리비|해물찜|해물탕|낙지|주꾸미|오징어|아귀/i.test(name))mu='해산물';
+  else if(/피자|파스타/.test(cat)||/피자|pizza|파스타|pasta|리조또|risotto/i.test(name))mu='피자/파스타';
+  else if(/족발|보쌈/.test(cat)||/족발|보쌈|쟁반국수/i.test(name))mu='족발/보쌈';
+  else if(/버거|햄버거/.test(cat)||/버거|햄버거|burger|샌드위치|sandwich/i.test(name))mu='버거';
+  else if(/백반|정식|한정식|가정/.test(cat)||/백반|정식|한정식|가정식|집밥|쌈밥|비빔밥|제육|돌솥|보리밥|쭈꾸미|불백|낙곱새|곤드레|산채|시골밥상|코다리|생선구이/i.test(name))mu='백반';
+  else if(/중식/.test(cat)||/중화|짬뽕|짜장|탕수육|마라|양꼬치|훠궈|딤섬|마라탕|마라샹궈|중국집|북경|사천|유린기|깐풍기|동파육/i.test(name))mu='중식';
+  else if(/분식/.test(cat)||/떡볶이|순대|김밥|라볶이|튀김|만두|핫도그|어묵|오뎅|쫄볶이|떡꼬치|붕어빵/i.test(name))mu='분식';
+  else if(/카레|curry/i.test(cn))mu='카레';
+  // 양식 세부 판별 (기본값 대신 이름 기반)
+  if(mu==='기타'&&cu==='양식'){
+    if(/스테이크|steak|그릴|grill/i.test(name))mu='고기';
+    else if(/파스타|pasta|리조또|risotto|뇨끼/i.test(name))mu='피자/파스타';
+    else if(/버거|burger|샌드위치/i.test(name))mu='버거';
+    else mu='피자/파스타';
+  }
+  // 일식 세부 판별
+  if(mu==='기타'&&cu==='일식'){
+    if(/라멘|ramen|우동|소바|soba/i.test(name))mu='면류';
+    else if(/카츠|돈까스|돈가스|텐동/i.test(name))mu='돈까스';
+    else if(/이자카야|야키토리|꼬치/i.test(name))mu='기타';
+    else mu='회/초밥';
+  }
+  return{cu:cu,mu:mu};
+}
+
+// ═══ 제외 필터 (비음식점) ═══
+// place_name 기반 필터는 최소화 — category 기반 판별을 parseKakao에서 수행
+var SKIP_NAME=/편의점|GS25|CU마트|세븐일레븐|이마트24|미니스톱/i;
+var SKIP_CAT=/카페|커피|coffee|cafe|빵집|베이커리|bakery|디저트|dessert|아이스크림|juice|주스/i;
+
+// ═══ 태그 ═══
+var TAGS=[
+  {k:"점심",i:"☀️",t:"scene",pr:["백반","면류","돈까스","국/탕","피자/파스타","분식"],av:[]},
+  {k:"저녁",i:"🌙",t:"scene",pr:["고기","회/초밥","해산물"],av:[]},
+  {k:"고기",i:"🥩",t:"menu",mu:"고기"},
+  {k:"면",i:"🍜",t:"menu",mu:"면류"},
+  {k:"국·탕",i:"🍲",t:"menu",mu:"국/탕"},
+  {k:"치킨",i:"🍗",t:"menu",mu:"치킨"},
+  {k:"돈까스",i:"🍱",t:"menu",mu:"돈까스"},
+  {k:"양식",i:"🍕",t:"menu",mu:"피자/파스타"},
+  {k:"데이트",i:"💕",t:"scene",pr:["피자/파스타","회/초밥","돈까스"],av:["국/탕"],cp:["양식","일식"]},
+  {k:"술안주",i:"🍺",t:"scene",pr:["고기","치킨","족발/보쌈","해산물","중식","회/초밥"],av:["백반","버거","분식","카레","돈까스","면류","기타","피자/파스타","국/탕"]},
+  {k:"해장",i:"🥴",t:"scene",pr:["국/탕"],av:["피자/파스타"]},
+  {k:"즐겨찾기",i:"💛",t:"fav"}
+];
+
+// ═══ 상태 ═══
+var myLat=0,myLon=0,myAddr='',allR=[],curList=[];
+var activeTag=null,spn=false,rot=0,selR=null,errorMsg='';
+var hist=[];try{hist=JSON.parse(localStorage.getItem('mkr_hist')||'[]')}catch(e){hist=[]}
+var radius=1000,actx=null,rmap=null;
+var favs=[];try{favs=JSON.parse(localStorage.getItem('mkr_favorites')||'[]')}catch(e){favs=[]}
+var _detailR=null,_batchQueue=[],_batchIdx=0;
+var MAX_WHEEL=20;
+function popScore(r){return(r.rating||0)*30+(r.blogCnt||0)*3+(r.ratingCnt||0)*5+(r.commentCnt||0)*2}
+
+// ═══ XHR ═══
+function xhrGet(url,ms,headers,cb){
+  try{var x=new XMLHttpRequest();x.open('GET',url,true);x.timeout=ms;
+  if(headers){for(var k in headers)x.setRequestHeader(k,headers[k])}
+  x.onload=function(){cb(null,x.status,x.responseText)};
+  x.onerror=function(){cb('네트워크오류')};
+  x.ontimeout=function(){cb('타임아웃')};
+  x.send()}catch(e){cb(e.message)}
+}
+
+// ═══════════════════════════════════════
+// 카카오 로컬 API 검색 (네이티브 브릿지)
+// ═══════════════════════════════════════
+var _kakaoCallbacks={};
+function kakaoSearch(lat,lon,rad,page,cb){
+  if(typeof Android!=='undefined'&&Android.kakaoSearch){
+    var cbKey='ks_'+page+'_'+Date.now();
+    _kakaoCallbacks[cbKey]=cb;
+    Android.kakaoSearch(lat,lon,rad,page,'_onKakaoResult_'+cbKey);
+    window['_onKakaoResult_'+cbKey]=function(code,b64){
+      delete window['_onKakaoResult_'+cbKey];
+      var fn=_kakaoCallbacks[cbKey];delete _kakaoCallbacks[cbKey];
+      if(!fn)return;
+      if(code<200||code>=300){fn(code===401?'API키오류':code===-2?'연결시간초과':code===-3?'인터넷연결확인':code===-4?'보안연결오류':code===-5?'네트워크오류':'HTTP'+code);return}
+      if(!b64){fn('빈응답');return}
+      try{var d=JSON.parse(b64decode(b64));fn(null,d)}catch(e){fn('JSON오류')}
+    };
+    return;
+  }
+  // 웹 폴백 (개발용)
+  var key='';try{key=localStorage.getItem('mkr_kakao_key')||''}catch(e){}
+  if(!key){cb('API키없음');return}
+  var url='https://dapi.kakao.com/v2/local/search/category.json'
+    +'?category_group_code=FD6'
+    +'&x='+lon+'&y='+lat
+    +'&radius='+rad
+    +'&size=15&page='+page
+    +'&sort=accuracy';
+  xhrGet(url,10000,{'Authorization':'KakaoAK '+key},function(err,status,text){
+    if(err){cb(err);return}
+    if(status===401){cb('API키오류');return}
+    if(status<200||status>=300){cb('HTTP'+status);return}
+    try{var d=JSON.parse(text);cb(null,d)}catch(e){cb('JSON오류')}
+  });
+}
+
+// 여러 페이지 가져오기 (최대 5페이지 = 75곳)
+var KAKAO_MAX_PAGE=5;
+function kakaoSearchAll(lat,lon,rad,done){
+  S('맛집 검색 중...');
+  var allDocs=[];
+  function fetchPage(page){
+    kakaoSearch(lat,lon,rad,page,function(err,d){
+      if(err){if(allDocs.length>0)done(null,allDocs);else done(err,[]);return}
+      var docs=d.documents||[];
+      allDocs=allDocs.concat(docs);
+      if(page<KAKAO_MAX_PAGE&&d.meta&&!d.meta.is_end&&docs.length>=15){
+        S('추가 검색 중... ('+allDocs.length+'곳)');
+        fetchPage(page+1);
+      }else{done(null,allDocs)}
+    });
+  }
+  fetchPage(1);
+}
+
+// 카카오 결과 → 내부 형식
+function parseKakao(docs){
+  var res=[],seen={},i;
+  for(i=0;i<docs.length;i++){
+    try{
+      var d=docs[i];
+      var name=d.place_name;if(!name)continue;
+      name=name.replace(/\s+/g,' ').trim();
+      if(name.length<2)continue;
+      // 편의점 등 확실한 비음식점만 이름으로 제외
+      if(SKIP_NAME.test(name))continue;
+      // 카테고리가 FD6(음식점)이면 카페/디저트 이름이어도 통과
+      var catGroup=d.category_group_code||'';
+      if(catGroup!=='FD6'&&SKIP_CAT.test(d.category_name||''))continue;
+      // FD6이더라도 카테고리에 카페/디저트만 있고 음식 카테고리가 없으면 제외
+      if(catGroup==='FD6'&&SKIP_CAT.test(d.category_name||'')&&!/음식점|한식|양식|일식|중식|분식/.test(d.category_name||''))continue;
+      if(seen[name])continue;seen[name]=1;
+      var lat=parseFloat(d.y),lon=parseFloat(d.x);
+      if(!lat||!lon)continue;
+      var di=d.distance?parseInt(d.distance):Math.round(hav(myLat,myLon,lat,lon));
+      var cl=classifyKakao(d.category_name,name);
+      res.push({
+        id:'k'+i,name:name,
+        cu:cl.cu,mu:cl.mu,
+        di:di,lat:lat,lon:lon,
+        cl:COL[res.length%COL.length],
+        ic:MIC[cl.mu]||'🍽️',
+        score:50,reason:'',
+        phone:d.phone||'',
+        addr:d.road_address_name||d.address_name||'',
+        url:d.place_url||'',
+        cat:d.category_name||''
+      });
+    }catch(e){}
+  }
+  // 거리순 정렬 제거 — getList()에서 popScore 기반 정렬
+  _log('카카오파싱:'+res.length);
+  return res;
+}
+
+// ═══ 리스트 ═══
+function getList(){
+  var tag=null,i,pool=[];
+  if(activeTag){for(i=0;i<TAGS.length;i++){if(TAGS[i].k===activeTag){tag=TAGS[i];break}}}
+  // 즐겨찾기 태그: 반경 무관, 전체 allR + favs 에서 매칭
+  if(tag&&tag.t==='fav'){
+    var fList=[];
+    for(i=0;i<favs.length;i++){
+      var f=favs[i],found=null;
+      for(var j=0;j<allR.length;j++){if(allR[j].name===f.name&&allR[j].url===f.url){found=copyR(allR[j]);break}}
+      if(!found){found={id:'f'+i,name:f.name,cu:f.cu||'',mu:f.mu||'',di:f.di||0,lat:f.lat||0,lon:f.lon||0,cl:f.cl||COL[i%COL.length],ic:f.ic||'🍽️',score:50,reason:'',phone:f.phone||'',addr:f.addr||'',url:f.url||'',cat:f.cat||'',rating:f.rating||0,ratingCnt:f.ratingCnt||0,blogCnt:f.blogCnt||0,commentCnt:f.commentCnt||0,totalReviews:f.totalReviews||0};
+        if(myLat&&myLon&&found.lat&&found.lon)found.di=Math.round(hav(myLat,myLon,found.lat,found.lon));}
+      found.reason='💛 즐겨찾기';fList.push(found);
+    }
+    return fList;
+  }
+  // 반경 내 전체 pool
+  for(i=0;i<allR.length;i++){if(allR[i].di<=radius)pool.push(copyR(allR[i]))}
+  // 태그 필터를 먼저 적용 (pool에서 필터)
+  if(tag&&tag.t==='menu'){
+    var fil=[];for(i=0;i<pool.length;i++){if(pool[i].mu===tag.mu)fil.push(pool[i])}
+    pool=fil;
+  }
+  if(tag&&tag.t==='scene'){
+    var pref=[],rest=[];
+    for(i=0;i<pool.length;i++){var r=pool[i],s=50;var rr=r.rating||0;
+      if(r.totalReviews<=5)continue;
+      s+=Math.round(rr*8);
+      if(r.totalReviews>=10)s+=5;if(r.totalReviews>=30)s+=5;if(r.totalReviews>=50)s+=5;
+      if(tag.cp&&tag.cp.indexOf(r.cu)>=0)s+=10;
+      var isPref=tag.pr&&tag.pr.indexOf(r.mu)>=0;
+      var isAv=tag.av&&tag.av.indexOf(r.mu)>=0;
+      if(isPref){s+=20;r.reason=tag.k+'에 딱 맞는 '+r.mu}
+      r.score=Math.max(s,5);
+      if(isPref){pref.push(r)}
+      else if(!isAv&&s>=30){rest.push(r)}
+    }
+    pref.sort(function(a,b){return b.score-a.score});
+    rest.sort(function(a,b){return b.score-a.score});
+    var sc=pref.slice(0,MAX_WHEEL);
+    if(sc.length<MAX_WHEEL)sc=sc.concat(rest.slice(0,MAX_WHEEL-sc.length));
+    return sc.slice(0,MAX_WHEEL);
+  }
+  // popScore 기반 맛집 우선순위 정렬
+  var qualified=[],lowReview=[];
+  for(i=0;i<pool.length;i++){
+    var ps=popScore(pool[i]);pool[i].score=50+Math.round(ps);pool[i]._ps=ps;
+    if(pool[i].totalReviews>5){qualified.push(pool[i])}
+    else{lowReview.push(pool[i])}
+  }
+  qualified.sort(function(a,b){return b._ps-a._ps});
+  // 맛집이 부족하면 리뷰 적은 곳을 거리순으로 보충
+  if(qualified.length<MAX_WHEEL){
+    lowReview.sort(function(a,b){return a.di-b.di});
+    qualified=qualified.concat(lowReview.slice(0,MAX_WHEEL-qualified.length));
+  }
+  return qualified.slice(0,MAX_WHEEL);
+}
+function copyR(r){return{id:r.id,name:r.name,cu:r.cu,mu:r.mu,di:r.di,lat:r.lat,lon:r.lon,cl:r.cl,ic:r.ic,score:r.score,reason:'',phone:r.phone||'',addr:r.addr||'',url:r.url||'',cat:r.cat||'',rating:r.rating||0,ratingCnt:r.ratingCnt||0,blogCnt:r.blogCnt||0,commentCnt:r.commentCnt||0,totalReviews:r.totalReviews||0}}
+function wPick(list){var tot=0,i;for(i=0;i<list.length;i++)tot+=Math.max(list[i].score,5);var r=Math.random()*tot;for(i=0;i<list.length;i++){r-=Math.max(list[i].score,5);if(r<=0)return i}return list.length-1}
+
+// ═══ 외부 링크 ═══
+function extOpen(url){if(typeof Android!=='undefined'&&Android.openExternal){Android.openExternal(url)}else{window.open(url,'_blank')}}
+function openNaverDir(name,lat,lon){extOpen('nmap://route/walk?dlat='+lat+'&dlng='+lon+'&dname='+encodeURIComponent(name)+'&appname=com.mukbang.roulette')}
+function openKakaoPlace(url){if(url)extOpen(url)}
+function callPhone(p){if(p)extOpen('tel:'+p)}
+
+// ═══ 휠 ═══
+function drawWheel(list){
+  var cv=document.getElementById('wc');if(!cv||!list.length)return;
+  var W=Math.min(window.innerWidth-28,340),C=W/2,R=W/2-4,dp=window.devicePixelRatio||1;
+  cv.style.width=W+'px';cv.style.height=W+'px';cv.width=W*dp;cv.height=W*dp;
+  var ww=document.getElementById('ww');if(ww){ww.style.width=W+'px';ww.style.height=W+'px'}
+  var ctx=cv.getContext('2d');ctx.scale(dp,dp);ctx.clearRect(0,0,W,W);
+  var w=[],tot=0,i;for(i=0;i<list.length;i++){w.push(Math.max(list[i].score,5));tot+=w[i]}
+  var angle=-90;cv._segs=[];
+  for(i=0;i<list.length;i++){var r=list[i],sw=(w[i]/tot)*360;cv._segs.push(angle+sw/2);var sa=angle*Math.PI/180,ea=(angle+sw)*Math.PI/180;
+    ctx.beginPath();ctx.moveTo(C,C);ctx.arc(C,C,R,sa,ea);ctx.closePath();
+    var gd=ctx.createRadialGradient(C,C,12,C,C,R);gd.addColorStop(0,r.cl+'20');gd.addColorStop(.6,r.cl+'BB');gd.addColorStop(1,r.cl);ctx.fillStyle=gd;ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.15)';ctx.lineWidth=.5;ctx.stroke();
+    if(sw>7){var ma=(sa+ea)/2,tr=R*(list.length>14?.84:list.length>8?.86:.88);ctx.save();ctx.translate(C+tr*Math.cos(ma),C+tr*Math.sin(ma));ctx.rotate(ma+Math.PI/2);ctx.shadowColor='rgba(0,0,0,.7)';ctx.shadowBlur=3;var fs=list.length>14?7:list.length>8?9:11;
+      ctx.font=(fs+2)+'px sans-serif';ctx.fillStyle='#fff';ctx.textAlign='center';ctx.fillText(r.ic,0,sw>12?-4:0);
+      if(sw>12){ctx.font='bold '+fs+'px sans-serif';var nm=r.name.length>5?r.name.substring(0,5)+'…':r.name;ctx.fillText(nm,0,11)}
+      ctx.restore()}angle+=sw}
+  ctx.beginPath();ctx.arc(C,C,20,0,Math.PI*2);var cg=ctx.createRadialGradient(C,C,0,C,C,20);cg.addColorStop(0,'#fff');cg.addColorStop(1,'#e0e0e0');ctx.fillStyle=cg;ctx.fill();
+  ctx.font='bold 10px sans-serif';ctx.fillStyle='#333';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('GO!',C,C);
+}
+
+// ═══ 소리 ═══
+function tk(){try{if(!actx)actx=new(window.AudioContext||window.webkitAudioContext);var o=actx.createOscillator(),g=actx.createGain();o.connect(g);g.connect(actx.destination);o.frequency.value=700+Math.random()*300;g.gain.value=.03;o.start();o.stop(actx.currentTime+.02)}catch(e){}}
+function wn(){try{if(!actx)actx=new(window.AudioContext||window.webkitAudioContext);[523,659,784,1047].forEach(function(f,i){var o=actx.createOscillator(),g=actx.createGain();o.connect(g);g.connect(actx.destination);o.frequency.value=f;g.gain.value=.06;o.start(actx.currentTime+i*.1);o.stop(actx.currentTime+i*.1+.12)})}catch(e){}}
+
+// ═══ 스핀 ═══
+function spin(){
+  var list=curList;if(spn||list.length<2)return;spn=true;selR=null;
+  if(rmap){rmap.remove();rmap=null}
+  var el=document.getElementById('wi'),btn=document.getElementById('sbtn');if(!el||!btn){spn=false;return}
+  btn.disabled=true;btn.style.background='#333';btn.textContent='돌아가는 중...';
+  document.getElementById('ptr').style.animation='none';
+  document.getElementById('ra').innerHTML='';
+  try{navigator.vibrate(50)}catch(e){}
+  var idx=wPick(list),cv=document.getElementById('wc');
+  var tm=cv._segs[idx],stop=((-90-tm)%360+360)%360,cm=((rot%360)+360)%360;
+  var delta=((stop-cm)%360+360)%360;if(delta<30)delta+=360;
+  var total=360*(5+Math.floor(Math.random()*3))+delta;rot+=total;
+  el.style.transition='transform 4s cubic-bezier(.17,.67,.12,.99)';el.style.transform='rotate('+rot+'deg)';
+  var tc=0,ti=setInterval(function(){tc++;tk();try{navigator.vibrate(8)}catch(e){}if(tc>25)clearInterval(ti)},130);
+  var picked=list[idx];
+  setTimeout(function(){
+    clearInterval(ti);spn=false;el.style.transition='none';
+    btn.disabled=false;btn.style.background='linear-gradient(135deg,#FFD700,#FF6B6B)';btn.textContent='🎲  돌려!';
+    document.getElementById('ptr').style.animation='fl 2s ease-in-out infinite';
+    try{navigator.vibrate([50,50,50,50,200])}catch(e){}wn();
+    selR=picked;showResult(picked);doConf();
+    hist=[{name:picked.name,cl:picked.cl,ic:picked.ic,url:picked.url||''}].concat(hist).slice(0,8);
+    try{localStorage.setItem('mkr_hist',JSON.stringify(hist))}catch(e){}
+  },4200);
+}
+
+// ═══ 결과 + 지도 ═══
+function showResult(r){
+  var dm=r.di>=1000?(r.di/1000).toFixed(1)+'km':r.di+'m';
+  var tagObj=null;if(activeTag){for(var i=0;i<TAGS.length;i++){if(TAGS[i].k===activeTag){tagObj=TAGS[i];break}}}
+
+  // ── 추천 근거 생성 ──
+  var ev=[];
+  var walkMin=Math.max(1,Math.round(r.di/67));
+  ev.push({ic:'🚶',tx:'도보 '+walkMin+'분 ('+dm+')',cl:'#4ECDC4'});
+  var cats=(r.cat||'').split('>').map(function(s){return s.trim()}).filter(function(s){return s});
+  if(cats.length>=4)ev.push({ic:'⭐',tx:cats[cats.length-1]+' 전문',cl:'#FFD700'});
+  else if(cats.length>=3&&r.mu!=='기타')ev.push({ic:'🏷️',tx:r.mu+' 전문점',cl:'#FFD700'});
+  if(r.phone)ev.push({ic:'📞',tx:'전화 확인 가능',cl:'#88B04B'});
+  var sameMu=0;for(var j=0;j<allR.length;j++){if(allR[j].di<=radius&&allR[j].mu===r.mu)sameMu++}
+  if(sameMu>1)ev.push({ic:'📊',tx:'주변 '+r.mu+' '+sameMu+'곳 중 선정',cl:'#9B59B6'});
+  if(tagObj&&tagObj.t==='scene'&&tagObj.pr&&tagObj.pr.indexOf(r.mu)>=0)ev.push({ic:tagObj.i,tx:tagObj.k+'에 적합한 '+r.mu,cl:'#4ECDC4'});
+  if(r.url)ev.push({ic:'💛',tx:'카카오맵 인증 업체',cl:'#FEE500'});
+
+  var evHtml='<div style="margin-top:12px;padding:10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);text-align:left">';
+  evHtml+='<div style="font-size:9px;font-weight:700;color:#555;margin-bottom:6px;letter-spacing:1px">📋 추천 근거</div>';
+  for(var e=0;e<ev.length;e++){evHtml+='<div style="display:flex;align-items:center;gap:5px;padding:3px 0;font-size:10px"><span>'+ev[e].ic+'</span><span style="color:'+ev[e].cl+'">'+esc(ev[e].tx)+'</span></div>'}
+  evHtml+='</div>';
+
+  var addrPhone='';
+  if(r.addr)addrPhone+='<div style="font-size:10px;color:#666;margin-top:4px">📍 '+esc(r.addr)+'</div>';
+  if(r.phone)addrPhone+='<div style="font-size:10px;color:#666;margin-top:2px;cursor:pointer" onclick="callPhone(\''+esc(r.phone)+'\')">📞 '+esc(r.phone)+'</div>';
+
+  document.getElementById('ra').innerHTML=
+    '<div style="margin:16px 16px 0;padding:18px 14px;border-radius:18px;background:linear-gradient(140deg,'+r.cl+'10,'+r.cl+'20);border:1px solid '+r.cl+'30;animation:fU .4s ease-out">'
+    +'<div style="text-align:center">'
+    +'<div style="font-size:36px">'+r.ic+'</div>'
+    +(tagObj&&tagObj.t==='scene'?'<div style="font-size:10px;color:#4ECDC4;margin-top:3px">'+tagObj.i+' '+tagObj.k+' 추천</div>':'')
+    +'<div style="font-size:24px;font-weight:900;color:'+r.cl+';margin-top:5px;letter-spacing:-.5px">'+esc(r.name)+'</div>'
+    +'<div style="font-size:11px;color:#777;margin-top:4px">'+esc(r.cu)+' · '+esc(r.mu)+' · '+dm+'</div>'
+    +addrPhone
+    +'<div id="prating" style="margin-top:6px"></div>'
+    +'</div>'
+    +'<div id="pmenu"></div>'
+    +evHtml
+    +'<div id="rmap"></div>'
+    +'<div style="display:flex;gap:8px;justify-content:center;margin-top:12px">'
+    +'<button class="b" onclick="spin()" style="flex:1;padding:10px 0;border-radius:14px;font-size:13px;font-weight:700;background:rgba(255,255,255,.07);color:#ccc">🔄 다시</button>'
+    +'<button class="b" id="favBtn" onclick="onFavToggle()" style="padding:10px 14px;border-radius:14px;font-size:13px;font-weight:700;background:'+(isFav(r)?'rgba(255,215,0,.15)':'rgba(255,255,255,.05)')+';color:'+(isFav(r)?'#FFD700':'#666')+';border:'+(isFav(r)?'1px solid rgba(255,215,0,.3)':'1px solid rgba(255,255,255,.08)')+'">'+(isFav(r)?'💛':'🤍')+'</button>'
+    +(r.url?'<button class="b" onclick="openKakaoPlace(selR.url)" style="flex:1;padding:10px 0;border-radius:14px;font-size:13px;font-weight:700;background:#FEE500;color:#191919">💛 상세</button>':'')
+    +'<button class="b" onclick="openNaverDir(selR.name,selR.lat,selR.lon)" style="flex:1;padding:10px 0;border-radius:14px;font-size:13px;font-weight:700;background:'+r.cl+';color:#fff">🚶 길찾기</button>'
+    +'</div></div>';
+  setTimeout(function(){initMap(r)},100);
+  fetchPlaceDetail(r);
+}
+
+// ═══ 카카오 상세 (메뉴/평점/리뷰) ═══
+function getPlaceId(url){if(!url)return'';var m=url.match(/\/(\d+)/);return m?m[1]:''}
+
+function fetchPlaceDetail(r){
+  var pid=getPlaceId(r.url);if(!pid)return;
+  _detailR=r;
+  var el=document.getElementById('pmenu');
+  if(el)el.innerHTML='<div style="text-align:center;padding:6px"><div style="width:14px;height:14px;border:2px solid #333;border-top-color:#FFD700;border-radius:50%;animation:sp .7s linear infinite;margin:0 auto"></div></div>';
+  var detailUrl='https://place-api.map.kakao.com/places/panel3/'+pid;
+  if(typeof Android!=='undefined'&&Android.fetchUrl){
+    Android.fetchUrl(detailUrl,'_onPlaceDetail');
+  }else{
+    xhrGet(detailUrl,8000,null,function(err,status,text){
+      if(!err&&status>=200&&status<300&&text){try{renderPlaceDetail(JSON.parse(text),r);return}catch(e){}}
+      clearDetail();
+    });
+  }
+}
+
+function _onPlaceDetail(code,b64){
+  var r=_detailR;if(!r){clearDetail();return}
+  if(code<200||code>=400||!b64){clearDetail();return}
+  var text=b64decode(b64);
+  if(!text){clearDetail();return}
+  try{renderPlaceDetail(JSON.parse(text),r)}catch(e){_log('상세파싱:'+e.message);clearDetail()}
+}
+
+function clearDetail(){
+  var r=_detailR||selR;
+  if(r&&r.name){fetchBlogMenu(r);return}
+  var el=document.getElementById('pmenu');if(el)el.innerHTML='';
+}
+
+function renderPlaceDetail(d,r){
+  var ratEl=document.getElementById('prating');
+  var menuEl=document.getElementById('pmenu');
+  if(!ratEl||!menuEl)return;
+
+  var kr=d.kakaomap_review||{};var ss=kr.score_set||{};
+  var br=d.blog_review||{};
+  var score=ss.average_score||0,scoreCnt=ss.review_count||0;
+  var blogCnt=br.review_count||0,comCnt=0;
+  var totalRev=scoreCnt+blogCnt;
+
+  // allR에 평점 정보 저장
+  if(r&&score>0){
+    for(var k=0;k<allR.length;k++){
+      if(allR[k].name===r.name&&allR[k].url===r.url){
+        allR[k].rating=score;allR[k].ratingCnt=scoreCnt;
+        allR[k].blogCnt=blogCnt;allR[k].commentCnt=comCnt;
+        allR[k].totalReviews=totalRev;break;
+      }
+    }
+    r.rating=score;r.ratingCnt=scoreCnt;r.blogCnt=blogCnt;r.commentCnt=comCnt;r.totalReviews=totalRev;
+  }
+
+  var ratHtml='';
+  if(score>0){
+    var stars='';for(var s=1;s<=5;s++)stars+=s<=Math.round(score)?'★':'☆';
+    ratHtml+='<span style="color:#FFD700;font-size:13px;letter-spacing:1px">'+stars+'</span> ';
+    ratHtml+='<span style="color:#FFD700;font-size:14px;font-weight:900">'+score.toFixed(1)+'</span> ';
+  }
+  var badges=[];
+  if(scoreCnt)badges.push('리뷰 '+scoreCnt);
+  if(blogCnt)badges.push('블로그 '+blogCnt);
+  if(comCnt)badges.push('댓글 '+comCnt);
+  if(badges.length)ratHtml+='<span style="font-size:10px;color:#888">'+badges.join(' · ')+'</span>';
+  ratEl.innerHTML=ratHtml;
+
+  var ml=[];
+  if(d.menu&&d.menu.menus&&d.menu.menus.items)ml=d.menu.menus.items;
+  if(ml.length===0){
+    if(r&&r.name){fetchBlogMenu(r)}else{menuEl.innerHTML=''}
+    return;
+  }
+
+  var h='<div style="margin-top:10px;padding:10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);text-align:left">';
+  h+='<div style="font-size:9px;font-weight:700;color:#555;margin-bottom:6px;letter-spacing:1px">🍽️ 메뉴</div>';
+  var mx=Math.min(ml.length,8);
+  for(var i=0;i<mx;i++){
+    var m=ml[i];
+    var mname=m.name||'';
+    var mprice=m.price?String(m.price):'';
+    if(!mname)continue;
+    var priceStr='';
+    if(mprice){var raw=String(mprice).replace(/[^0-9]/g,'');var pnum=parseInt(raw);priceStr=pnum>0?pnum.toLocaleString()+'원':String(mprice)}
+    var isRec=m.is_recommend||false;
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.03)">';
+    h+='<span style="font-size:11px;color:#ccc">'+(isRec?'👍 ':'')+esc(mname)+'</span>';
+    h+='<span style="font-size:11px;font-weight:700;color:'+(priceStr?'#FFD700':'#555')+';white-space:nowrap;margin-left:8px">'+(priceStr||'-')+'</span>';
+    h+='</div>';
+  }
+  if(ml.length>8)h+='<div style="text-align:center;font-size:9px;color:#555;padding-top:4px">외 '+(ml.length-8)+'개</div>';
+  h+='</div>';
+  menuEl.innerHTML=h;
+}
+
+// ═══ 평점 수집 ═══
+var _batchLoading=false,_batchAborted=false,_batchDone=null;
+function fetchBatchRatings(list,done){
+  _batchAborted=false;_batchQueue=[];_batchIdx=0;_batchLoading=true;_batchDone=done||null;
+  var count=0;
+  for(var i=0;i<list.length&&count<40;i++){
+    if(!list[i].rating&&list[i].url){_batchQueue.push(list[i]);count++}
+  }
+  if(_batchQueue.length>0){_showBatchProgress();_fetchNextBatch()}
+  else{_batchLoading=false;if(_batchDone){_batchDone();_batchDone=null}}
+}
+function _showBatchProgress(){
+  if(isLoading){S('평점 확인 중... ('+_batchIdx+'/'+_batchQueue.length+')')}
+  else{var el=document.getElementById('rstat');if(el)el.innerHTML='<span style="font-size:10px;color:#FFD700;animation:pu 1.5s infinite">⭐ 평점 불러오는 중... ('+_batchIdx+'/'+_batchQueue.length+')</span>'}
+}
+function _fetchNextBatch(){
+  if(_batchAborted||_batchIdx>=_batchQueue.length){_batchLoading=false;if(_batchDone){_batchDone();_batchDone=null}else{render()}return}
+  var r=_batchQueue[_batchIdx];_batchIdx++;
+  var pid=getPlaceId(r.url);if(!pid){setTimeout(_fetchNextBatch,30);return}
+  var detailUrl='https://place-api.map.kakao.com/places/panel3/'+pid;
+  if(typeof Android!=='undefined'&&Android.fetchUrl){
+    var cbKey='_batch_'+_batchIdx+'_'+Date.now();
+    window[cbKey]=function(code,b64){
+      delete window[cbKey];
+      if(code>=200&&code<400&&b64){
+        try{var text=b64decode(b64);var d=JSON.parse(text);_applyBatchRating(d,r)}catch(e){}
+      }
+      _showBatchProgress();setTimeout(_fetchNextBatch,50);
+    };
+    Android.fetchUrl(detailUrl,cbKey);
+  }else{
+    xhrGet(detailUrl,8000,null,function(err,status,text){
+      if(!err&&status>=200&&status<300&&text){try{_applyBatchRating(JSON.parse(text),r)}catch(e){}}
+      _showBatchProgress();setTimeout(_fetchNextBatch,50);
+    });
+  }
+}
+function _applyBatchRating(d,r){
+  var kr=d.kakaomap_review||{};var ss=kr.score_set||{};
+  var br=d.blog_review||{};
+  if(!ss.review_count)return;
+  var score=ss.average_score||0;
+  var scoreCnt=ss.review_count||0;
+  var blogCnt=br.review_count||0;
+  var totalRev=scoreCnt+blogCnt;
+  for(var i=0;i<allR.length;i++){
+    if(allR[i].name===r.name&&allR[i].url===r.url){
+      allR[i].rating=score;allR[i].ratingCnt=scoreCnt;
+      allR[i].blogCnt=blogCnt;allR[i].commentCnt=0;
+      allR[i].totalReviews=totalRev;break;
+    }
+  }
+}
+
+// ═══ 블로그 메뉴 fallback ═══
+var _blogCallbacks={};
+function fetchBlogMenu(r){
+  if(!r||!r.name)return;
+  var q=r.name+' 메뉴';
+  var el=document.getElementById('pmenu');
+  if(el)el.innerHTML='<div style="text-align:center;padding:6px"><div style="width:14px;height:14px;border:2px solid #333;border-top-color:#FFD700;border-radius:50%;animation:sp .7s linear infinite;margin:0 auto"></div><div style="font-size:9px;color:#444;margin-top:4px">블로그 검색 중...</div></div>';
+  if(typeof Android!=='undefined'&&Android.blogSearch){
+    var cbKey='_blog_'+Date.now();
+    _blogCallbacks[cbKey]=r;
+    window[cbKey]=function(code,b64){
+      delete window[cbKey];
+      var rr=_blogCallbacks[cbKey];delete _blogCallbacks[cbKey];
+      if(code>=200&&code<300&&b64){
+        try{var d=JSON.parse(b64decode(b64));renderBlogMenu(d,rr||r);return}catch(e){}
+      }
+      showMenuFallbackLinks(rr||r);
+    };
+    Android.blogSearch(q,cbKey);
+  }else{
+    var key='';try{key=localStorage.getItem('mkr_kakao_key')||''}catch(e){}
+    if(!key){showMenuFallbackLinks(r);return}
+    xhrGet('https://dapi.kakao.com/v2/search/blog?query='+encodeURIComponent(q)+'&size=5',8000,{'Authorization':'KakaoAK '+key},function(err,status,text){
+      if(!err&&status>=200&&status<300&&text){try{renderBlogMenu(JSON.parse(text),r);return}catch(e){}}
+      showMenuFallbackLinks(r);
+    });
+  }
+}
+function renderBlogMenu(d,r){
+  var el=document.getElementById('pmenu');if(!el)return;
+  var docs=(d.documents||[]);
+  var menus=parseBlogMenu(docs);
+  if(menus.length===0){showMenuFallbackLinks(r);return}
+  var h='<div style="margin-top:10px;padding:10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);text-align:left">';
+  h+='<div style="font-size:9px;font-weight:700;color:#555;margin-bottom:6px;letter-spacing:1px">🍽️ 메뉴 <span style="color:#444">(블로그 참고)</span></div>';
+  for(var i=0;i<menus.length;i++){
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.03)">';
+    h+='<span style="font-size:11px;color:#ccc">'+esc(menus[i].name)+'</span>';
+    h+='<span style="font-size:11px;font-weight:700;color:'+(menus[i].price?'#FFD700':'#555')+';white-space:nowrap;margin-left:8px">'+(menus[i].price||'-')+'</span>';
+    h+='</div>';
+  }
+  h+='</div>';
+  el.innerHTML=h;
+}
+function parseBlogMenu(docs){
+  var found={},results=[],i,j;
+  var priceRe=/([가-힣a-zA-Z]{2,12})\s*[:·\-~]\s*(\d{1,3}[,.]?\d{3})\s*원/g;
+  var priceRe2=/([가-힣]{2,8})\s+(\d{1,2}[,.]?\d{3,4})\s*원/g;
+  for(i=0;i<docs.length;i++){
+    var txt=(docs[i].title||'').replace(/<[^>]+>/g,'')+' '+(docs[i].contents||'').replace(/<[^>]+>/g,'');
+    var m;
+    priceRe.lastIndex=0;
+    while((m=priceRe.exec(txt))!==null){
+      var mn=m[1].trim(),mp=parseInt(m[2].replace(/[,.]/g,''));
+      if(mn&&mp>0&&mp<500000&&!found[mn]){found[mn]=1;results.push({name:mn,price:mp.toLocaleString()+'원'})}
+    }
+    priceRe2.lastIndex=0;
+    while((m=priceRe2.exec(txt))!==null){
+      var mn2=m[1].trim(),mp2=parseInt(m[2].replace(/[,.]/g,''));
+      if(mn2&&mp2>0&&mp2<500000&&!found[mn2]){found[mn2]=1;results.push({name:mn2,price:mp2.toLocaleString()+'원'})}
+    }
+  }
+  return results.slice(0,5);
+}
+function showMenuFallbackLinks(r){
+  var el=document.getElementById('pmenu');if(!el)return;
+  if(!r||!r.url){el.innerHTML='';return}
+  el.innerHTML='<div style="margin-top:10px;padding:12px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);text-align:center">'
+    +'<div style="font-size:10px;color:#555;margin-bottom:8px">메뉴 정보를 찾을 수 없습니다</div>'
+    +'<div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">'
+    +'<button class="b" onclick="openKakaoPlace((_detailR||selR).url)" style="padding:6px 12px;border-radius:10px;font-size:10px;font-weight:700;background:#FEE500;color:#191919">💛 카카오맵</button>'
+    +'<button class="b" onclick="extOpen(\'https://m.search.naver.com/search.naver?query=\'+encodeURIComponent((_detailR||selR).name))" style="padding:6px 12px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(30,200,100,.12);color:#1EC864;border:1px solid rgba(30,200,100,.2)">🔍 네이버</button>'
+    +'<button class="b" onclick="extOpen(\'https://www.google.com/search?q=\'+encodeURIComponent((_detailR||selR).name))" style="padding:6px 12px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(66,133,244,.12);color:#4285F4;border:1px solid rgba(66,133,244,.2)">🔍 구글</button>'
+    +'</div></div>';
+}
+
+function initMap(r){
+  if(rmap){rmap.remove();rmap=null}
+  var el=document.getElementById('rmap');if(!el)return;
+  try{
+    rmap=L.map('rmap',{zoomControl:false,attributionControl:true,dragging:true,scrollWheelZoom:false});
+    rmap.fitBounds(L.latLngBounds([[r.lat,r.lon],[myLat,myLon]]),{padding:[30,30],maxZoom:17});
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© OSM · CartoDB',maxZoom:19}).addTo(rmap);
+    L.marker([r.lat,r.lon],{icon:L.divIcon({html:'<div style="font-size:28px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))">'+r.ic+'</div>',className:'',iconSize:[32,32],iconAnchor:[16,28]})}).addTo(rmap);
+    L.marker([myLat,myLon],{icon:L.divIcon({html:'<div style="width:12px;height:12px;background:#4285F4;border:2px solid #fff;border-radius:50%;box-shadow:0 0 8px rgba(66,133,244,.5)"></div>',className:'',iconSize:[12,12],iconAnchor:[6,6]})}).addTo(rmap);
+    L.polyline([[myLat,myLon],[r.lat,r.lon]],{color:r.cl,weight:2,opacity:.5,dashArray:'6,8'}).addTo(rmap);
+  }catch(e){el.style.display='none'}
+}
+
+function doConf(){var b=document.getElementById('cb');b.innerHTML='';for(var i=0;i<20;i++){var d=document.createElement('div');d.className='cf';var s=4+Math.random()*8;d.style.cssText='left:'+Math.random()*100+'%;width:'+s+'px;height:'+s+'px;background:'+COL[i%COL.length]+';border-radius:'+(s>8?'50%':'2px')+';animation-delay:'+Math.random()*.4+'s;animation-duration:'+(1.5+Math.random()*1.5)+'s';b.appendChild(d)}setTimeout(function(){b.innerHTML=''},3500)}
+
+// ═══ 즐겨찾기 ═══
+function saveFavs(){try{localStorage.setItem('mkr_favorites',JSON.stringify(favs))}catch(e){}}
+function isFav(r){if(!r)return false;for(var i=0;i<favs.length;i++){if(favs[i].name===r.name&&favs[i].url===r.url)return true}return false}
+function toggleFav(r){
+  if(!r)return;
+  for(var i=0;i<favs.length;i++){if(favs[i].name===r.name&&favs[i].url===r.url){favs.splice(i,1);saveFavs();return false}}
+  favs.push({name:r.name,cu:r.cu,mu:r.mu,di:r.di,lat:r.lat,lon:r.lon,cl:r.cl,ic:r.ic,phone:r.phone||'',addr:r.addr||'',url:r.url||'',cat:r.cat||'',rating:r.rating||0,ratingCnt:r.ratingCnt||0,blogCnt:r.blogCnt||0,commentCnt:r.commentCnt||0,totalReviews:r.totalReviews||0});
+  saveFavs();return true;
+}
+function onFavToggle(){
+  if(!selR)return;
+  var added=toggleFav(selR);
+  var btn=document.getElementById('favBtn');
+  if(btn){btn.textContent=added?'💛':'🤍';btn.style.background=added?'rgba(255,215,0,.15)':'rgba(255,255,255,.05)';btn.style.color=added?'#FFD700':'#666';btn.style.border=added?'1px solid rgba(255,215,0,.3)':'1px solid rgba(255,255,255,.08)'}
+}
+function removeFav(idx){if(idx>=0&&idx<favs.length){favs.splice(idx,1);saveFavs();showSettings()}}
+
+// ═══ 설정 ═══
+function showSettings(){
+  if(rmap){rmap.remove();rmap=null}
+  var raEl=document.getElementById('ra');if(raEl)raEl.innerHTML='';
+  var listH='',favH='',i;
+  var mx=Math.min(curList.length,30);
+  for(i=0;i<mx;i++){var r=curList[i],dm=r.di>=1000?(r.di/1000).toFixed(1)+'km':r.di+'m';var rStar=r.rating?(r.rating.toFixed(1)+'★ '):'';listH+='<div onclick="openKakaoPlace(curList['+i+'].url||\'\')" style="display:flex;align-items:center;gap:6px;padding:8px 2px;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer"><span style="font-size:14px">'+r.ic+'</span><div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.name)+'</div><div style="font-size:9px;color:#555">'+esc(r.cu)+' · '+esc(r.mu)+(rStar?' · <span style="color:#FFD700">'+rStar+'</span>':'')+'</div></div><span style="font-size:9px;color:#555">'+dm+'</span></div>'}
+  if(curList.length>30)listH+='<div style="text-align:center;font-size:9px;color:#444;padding:6px">외 '+(curList.length-30)+'곳</div>';
+  // 즐겨찾기 목록
+  if(favs.length){
+    for(i=0;i<favs.length;i++){favH+='<div style="display:flex;align-items:center;gap:6px;padding:6px 2px;border-bottom:1px solid rgba(255,255,255,.04)"><span style="font-size:14px">'+(favs[i].ic||'🍽️')+'</span><div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(favs[i].name)+'</div></div><button class="b" onclick="removeFav('+i+')" style="padding:2px 8px;border-radius:8px;font-size:10px;background:rgba(231,76,60,.08);color:#E74C3C;border:1px solid rgba(231,76,60,.12)">✕</button></div>'}
+  }else{favH='<div style="font-size:10px;color:#444;padding:8px;text-align:center">아직 없어요</div>'}
+  document.getElementById('modal').innerHTML='<div class="modal" onclick="if(event.target===this)closeSettings()"><div class="modal-box">'
+    +'<div style="font-size:16px;font-weight:900;color:#FFD700;margin-bottom:16px">⚙️ 설정</div>'
+    +'<div style="margin-bottom:16px"><div style="font-size:11px;font-weight:700;color:#666;margin-bottom:6px">💛 즐겨찾기 ('+favs.length+')</div><div style="max-height:120px;overflow-y:auto">'+favH+'</div>'
+    +(favs.length>0?'<button class="b" onclick="if(confirm(\'즐겨찾기를 모두 삭제할까요?\')){favs=[];saveFavs();showSettings()}" style="display:block;width:100%;margin-top:6px;padding:7px;border-radius:8px;font-size:10px;font-weight:700;background:rgba(231,76,60,.05);color:#E74C3C;border:1px solid rgba(231,76,60,.08)">전체 삭제</button>':'')
+    +'</div>'
+    +'<div style="margin-bottom:16px"><div style="font-size:11px;font-weight:700;color:#666;margin-bottom:6px">🍴 맛집 목록 ('+curList.length+')</div><div style="max-height:180px;overflow-y:auto">'+listH+'</div></div>'
+    +'<div style="margin-bottom:16px"><button class="b" onclick="hist=[];allR=[];try{localStorage.removeItem(\'mkr_hist\');localStorage.removeItem(\'mkr_cache\')}catch(e){};if(typeof Android!==\'undefined\'&&Android.clearCache)try{Android.clearCache()}catch(e){};closeSettings();forceRefresh=true;isLoading=true;S(\'재검색 중...\');doSearch()" style="display:block;width:100%;padding:9px;border-radius:10px;font-size:11px;font-weight:700;background:rgba(231,76,60,.08);color:#E74C3C;border:1px solid rgba(231,76,60,.12)">🗑️ 캐시/기록 삭제</button></div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:16px"><button class="b" onclick="showHelp()" style="flex:1;padding:9px;border-radius:10px;font-size:11px;font-weight:700;background:rgba(78,205,196,.08);color:#4ECDC4;border:1px solid rgba(78,205,196,.15)">📖 사용 가이드</button><button class="b" onclick="showPrivacy()" style="flex:1;padding:9px;border-radius:10px;font-size:11px;font-weight:700;background:rgba(255,255,255,.04);color:#666;border:1px solid rgba(255,255,255,.08)">🔒 개인정보</button></div>'
+    +'<div style="font-size:10px;color:#555;line-height:1.6;margin-bottom:14px">🔒 위치는 검색에만 사용. 서버 저장 없음.<br>📡 데이터: 카카오맵 (실시간, 폐업 제거)</div>'
+    +'<div style="font-size:8px;color:#333;margin-bottom:10px">'+APP_NAME+' v'+APP_VER+'</div>'
+    +'<button class="b" onclick="closeSettings()" style="display:block;width:100%;padding:10px;border-radius:12px;font-size:13px;font-weight:700;background:rgba(255,255,255,.06);color:#888">닫기</button>'
+    +'</div></div>';
+}
+function closeSettings(){document.getElementById('modal').innerHTML=''}
+
+// ═══ 사용 가이드 ═══
+function showHelp(){
+  if(rmap){rmap.remove();rmap=null}
+  var raEl=document.getElementById('ra');if(raEl)raEl.innerHTML='';
+  var h='<div class="modal" onclick="if(event.target===this)closeSettings()"><div class="modal-box" style="max-width:360px">'
+    +'<div style="font-size:16px;font-weight:900;color:#FFD700;margin-bottom:14px">📖 사용 가이드</div>'
+
+    +'<div style="margin-bottom:14px">'
+    +'<div style="font-size:12px;font-weight:800;color:#4ECDC4;margin-bottom:6px">🎰 기본 사용법</div>'
+    +'<div style="font-size:11px;color:#aaa;line-height:1.7">'
+    +'1. 앱을 열면 <b style="color:#FFD700">현재 위치</b> 기준 반경 1km 맛집을 자동 검색합니다.<br>'
+    +'2. <b style="color:#FF6B6B">🎲 돌려!</b> 버튼을 눌러 룰렛을 돌립니다.<br>'
+    +'3. 결과에서 <b style="color:#4ECDC4">메뉴, 평점, 거리, 지도</b>를 확인하세요.<br>'
+    +'4. <b style="color:#ccc">🚶 길찾기</b>를 눌러 네이버 지도로 바로 이동!</div></div>'
+
+    +'<div style="margin-bottom:14px">'
+    +'<div style="font-size:12px;font-weight:800;color:#4ECDC4;margin-bottom:6px">🏷️ 태그 필터</div>'
+    +'<div style="font-size:11px;color:#aaa;line-height:1.7">'
+    +'<b style="color:#FFD700">메뉴 태그</b> (고기, 면, 국/탕, 치킨 등) — 해당 메뉴 전문점만 룰렛에 표시<br>'
+    +'<b style="color:#FFD700">장면 태그</b> (점심, 저녁, 데이트, 술안주, 해장) — 상황에 맞는 음식점 우선 추천<br>'
+    +'<b style="color:#FFD700">💛 즐겨찾기</b> — 저장한 맛집만 룰렛에 표시<br>'
+    +'같은 태그를 다시 터치하면 해제됩니다.</div></div>'
+
+    +'<div style="margin-bottom:14px">'
+    +'<div style="font-size:12px;font-weight:800;color:#4ECDC4;margin-bottom:6px">⭐ 추천 방식</div>'
+    +'<div style="font-size:11px;color:#aaa;line-height:1.7">'
+    +'카카오맵의 <b style="color:#FFD700">평점, 리뷰 수, 블로그 리뷰</b>를 기반으로 인기도를 계산합니다. '
+    +'인기가 높을수록 룰렛에서 당첨될 확률이 올라갑니다. 평점 정보가 아직 없으면 가까운 순서로 표시됩니다.</div></div>'
+
+    +'<div style="margin-bottom:14px">'
+    +'<div style="font-size:12px;font-weight:800;color:#4ECDC4;margin-bottom:6px">💡 꿀팁</div>'
+    +'<div style="font-size:11px;color:#aaa;line-height:1.7">'
+    +'• <b style="color:#ccc">📍</b> 버튼: 현재 위치 갱신 (이동 후 사용)<br>'
+    +'• <b style="color:#ccc">🔄</b> 버튼: 맛집 목록 새로고침<br>'
+    +'• <b style="color:#ccc">💛/🤍</b>: 결과에서 즐겨찾기 추가/해제<br>'
+    +'• <b style="color:#ccc">⚙️ 설정</b>: 맛집 목록 확인, 캐시 삭제<br>'
+    +'• <b style="color:#8B5E3C">☕ 카페</b> 버튼: 주변 카페를 따로 검색<br>'
+    +'• 음식점 룰렛에서 카페/편의점은 자동 제외됩니다.</div></div>'
+
+    +'<div style="margin-bottom:14px">'
+    +'<div style="font-size:12px;font-weight:800;color:#4ECDC4;margin-bottom:6px">❓ 문제 해결</div>'
+    +'<div style="font-size:11px;color:#aaa;line-height:1.7">'
+    +'<b style="color:#ccc">맛집이 안 나와요</b> → 위치 권한 허용 확인 후 📍 버튼<br>'
+    +'<b style="color:#ccc">목록이 오래됐어요</b> → 설정 > 캐시/기록 삭제<br>'
+    +'<b style="color:#ccc">메뉴가 안 보여요</b> → 일부 업체는 메뉴 정보가 없을 수 있습니다</div></div>'
+
+    +'<button class="b" onclick="showSettings()" style="display:block;width:100%;padding:10px;border-radius:12px;font-size:13px;font-weight:700;background:rgba(255,255,255,.06);color:#888">← 돌아가기</button>'
+    +'</div></div>';
+  document.getElementById('modal').innerHTML=h;
+}
+function showPrivacy(){
+  if(rmap){rmap.remove();rmap=null}
+  var raEl=document.getElementById('ra');if(raEl)raEl.innerHTML='';
+  var h='<div class="modal" onclick="if(event.target===this)closeSettings()"><div class="modal-box" style="max-width:360px">'
+    +'<div style="font-size:16px;font-weight:900;color:#FFD700;margin-bottom:14px">🔒 개인정보처리방침</div>'
+    +'<div style="font-size:11px;color:#aaa;line-height:1.8">'
+    +'<b style="color:#ccc">수집 정보</b><br>'
+    +'• 위치 정보 (GPS 좌표) — 주변 맛집 검색용<br>'
+    +'• 네트워크 상태 — 연결 확인용<br><br>'
+    +'<b style="color:#ccc">수집하지 않는 정보</b><br>'
+    +'• 이름, 연락처, 계정 등 개인 식별 정보<br><br>'
+    +'<b style="color:#ccc">데이터 저장</b><br>'
+    +'• 모든 데이터는 기기 내부에만 저장됩니다.<br>'
+    +'• 서버로 전송하거나 제3자와 공유하지 않습니다.<br>'
+    +'• 앱 삭제 시 모든 데이터가 함께 삭제됩니다.<br><br>'
+    +'<b style="color:#ccc">제3자 서비스</b><br>'
+    +'• 카카오맵 API — 맛집 검색, 상세 정보<br>'
+    +'• OpenStreetMap — 주소 변환<br>'
+    +'• CartoDB — 지도 타일<br><br>'
+    +'<b style="color:#ccc">이용자 권리</b><br>'
+    +'• 기기 설정에서 위치 권한을 언제든 해제할 수 있습니다.<br>'
+    +'• 앱 내 설정에서 캐시/기록을 삭제할 수 있습니다.<br><br>'
+    +'<b style="color:#555">문의: mukbang.roulette.app@gmail.com</b>'
+    +'</div>'
+    +'<button class="b" onclick="showSettings()" style="display:block;width:100%;margin-top:14px;padding:10px;border-radius:12px;font-size:13px;font-weight:700;background:rgba(255,255,255,.06);color:#888">← 돌아가기</button>'
+    +'</div></div>';
+  document.getElementById('modal').innerHTML=h;
+}
+
+// ═══ 캐시 ═══
+var CK='mkr_cache',CTTL=3*3600000,CDIST=300;
+function saveC(lat,lon,rad,data){try{localStorage.setItem(CK,JSON.stringify({lat:lat,lon:lon,rad:rad,ts:Date.now(),data:data}))}catch(e){}}
+function loadC(lat,lon,rad){try{var c=JSON.parse(localStorage.getItem(CK)||'null');if(!c||Date.now()-c.ts>CTTL||Math.round(hav(lat,lon,c.lat,c.lon))>CDIST)return null;if(c.rad===rad)return c.data;return null}catch(e){return null}}
+function cAge(){try{var c=JSON.parse(localStorage.getItem(CK)||'null');if(!c)return'';var m=Math.round((Date.now()-c.ts)/60000);return m<1?'방금':m<60?m+'분전':Math.round(m/60)+'시간전'}catch(e){return''}}
+
+// ═══ 렌더링 ═══
+var isLoading=true,loadMsg='';
+function S(m){loadMsg=m;if(isLoading)document.getElementById('app').innerHTML='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:20px"><div style="font-size:48px">🎰</div><div style="font-size:22px;font-weight:900;color:#FFD700;margin-top:10px">오늘 뭐 먹지?</div><div class="ld"></div><div style="font-size:12px;color:#666;margin-top:8px">'+esc(loadMsg)+'</div></div>'}
+
+function render(){
+  if(rmap){rmap.remove();rmap=null}
+  curList=getList();var list=curList,h='',i,age=cAge();
+  h+='<div style="text-align:center;padding:18px 16px 8px">';
+  h+='<div style="font-size:24px;font-weight:900;background:linear-gradient(90deg,#FFD700,#FF6B6B,#4ECDC4,#FFD700);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:sh 3s linear infinite">오늘 뭐 먹지?</div>';
+  h+='<div style="font-size:11px;color:#555;margin-top:5px">📍 '+esc(myAddr)+' · '+list.length+'곳'+(age?' · '+age:'')+' <button class="b" id="locBtn" onclick="relocate()" style="padding:2px 6px;border-radius:6px;font-size:10px;background:rgba(255,255,255,.06);color:#4ECDC4;border:1px solid rgba(78,205,196,.2);vertical-align:middle">📍</button></div>';
+  h+='<div id="rstat" style="text-align:center;min-height:16px;margin-top:2px"></div>';
+  h+='</div>';
+  h+='<div style="display:flex;flex-direction:column;align-items:center;padding:0 14px">';
+  if(list.length<2){
+    h+='<div style="padding:50px 0;text-align:center">';
+    if(list.length===0&&errorMsg){
+      var userMsg='검색 중 오류가 발생했습니다';
+      if(errorMsg==='API키오류')userMsg='API 인증에 실패했습니다';
+      else if(errorMsg==='연결시간초과')userMsg='서버 연결이 느립니다';
+      else if(errorMsg==='인터넷연결확인')userMsg='인터넷 연결을 확인해주세요';
+      else if(errorMsg==='보안연결오류')userMsg='보안 연결 오류가 발생했습니다';
+      else if(errorMsg==='네트워크오류')userMsg='네트워크 오류가 발생했습니다';
+      h+='<div style="font-size:40px">⚠️</div>';
+      h+='<div style="font-size:14px;font-weight:700;color:#E74C3C;margin-top:10px">'+esc(userMsg)+'</div>';
+      h+='<div style="font-size:10px;color:#555;margin-top:4px">'+esc(errorMsg)+'</div>';
+      h+='<button class="b" onclick="errorMsg=\'\';forceRefresh=true;isLoading=true;S(\'재검색 중...\');doSearch()" style="margin-top:14px;padding:10px 28px;border-radius:25px;font-size:13px;font-weight:700;background:linear-gradient(135deg,#FFD700,#FF6B6B);color:#fff">🔄 다시 검색</button>';
+    }else{
+      h+='<div style="font-size:40px">'+(list.length===0?'😅':'🎯')+'</div>';
+      h+='<div style="font-size:13px;color:#888;margin-top:10px">'+(list.length===0?'조건에 맞는 곳이 없어요':'여기 어때요?')+'</div>';
+      if(list.length===1)h+='<div style="font-size:20px;font-weight:900;color:'+list[0].cl+';margin-top:8px">'+list[0].ic+' '+esc(list[0].name)+'</div>';
+      h+='<button class="b" onclick="tapTag(null)" style="margin-top:12px;padding:9px 24px;border-radius:20px;font-size:12px;font-weight:700;background:rgba(255,255,255,.06);color:#888;border:1px solid #222">조건 해제</button>';
+    }
+    h+='</div>';
+  }else{
+    h+='<div id="ptr" style="width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;border-top:22px solid #FFD700;filter:drop-shadow(0 2px 6px rgba(255,215,0,.5));margin-bottom:-2px;z-index:10;animation:fl 2s ease-in-out infinite"></div>';
+    h+='<div id="ww" style="position:relative;filter:drop-shadow(0 8px 24px rgba(0,0,0,.5))"><div id="wi" style="transform:rotate('+rot+'deg)"><canvas id="wc"></canvas></div></div>';
+    h+='<button class="b" id="sbtn" onclick="spin()" style="margin-top:14px;padding:13px 48px;font-size:17px;font-weight:900;letter-spacing:3px;border-radius:50px;background:linear-gradient(135deg,#FFD700,#FF6B6B);color:#fff;box-shadow:0 4px 20px rgba(255,107,107,.3);animation:pu 2s infinite">🎲  돌려!</button>';
+  }
+  h+='</div>';
+  h+='<div id="ra"></div>';
+  h+='<div style="padding:14px 14px 0;overflow-x:auto;-webkit-overflow-scrolling:touch"><div style="display:flex;gap:6px;padding-bottom:4px">';
+  for(i=0;i<TAGS.length;i++){var tg=TAGS[i],on=activeTag===tg.k;h+='<button class="b" onclick="tapTag(\''+tg.k+'\')" style="padding:7px 13px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap;flex-shrink:0;background:'+(on?'linear-gradient(135deg,#FFD700cc,#FF6B6Bcc)':'rgba(255,255,255,.05)')+';color:'+(on?'#fff':'#777')+';border:'+(on?'1px solid rgba(255,215,0,.4)':'1px solid rgba(255,255,255,.08)')+'">'+tg.i+' '+tg.k+'</button>'}
+  h+='</div></div>';
+  if(hist.length){h+='<div style="padding:10px 16px 0"><div style="font-size:10px;color:#444;font-weight:700;margin-bottom:5px">최근 선택</div><div style="display:flex;gap:5px;flex-wrap:wrap">';for(i=0;i<hist.length;i++)h+='<span onclick="openKakaoPlace(hist['+i+'].url||\'\')" style="padding:4px 9px;border-radius:12px;font-size:10px;font-weight:600;cursor:pointer;background:'+hist[i].cl+'12;color:'+hist[i].cl+';border:1px solid '+hist[i].cl+'18">'+hist[i].ic+' '+esc(hist[i].name)+'</span>';h+='</div></div>'}
+  h+='<div style="text-align:center;padding:14px 16px 24px;display:flex;gap:8px;justify-content:center"><button class="b" onclick="searchCafe()" style="padding:7px 16px;border-radius:12px;font-size:11px;font-weight:600;background:rgba(139,94,60,.1);color:#8B5E3C;border:1px solid rgba(139,94,60,.2)">☕ 카페</button><button class="b" onclick="showSettings()" style="padding:7px 16px;border-radius:12px;font-size:11px;font-weight:600;background:rgba(255,255,255,.04);color:#555;border:1px solid rgba(255,255,255,.06)">⚙️ 설정</button><button class="b" onclick="forceRefresh=true;isLoading=true;S(\'새로고침...\');doSearch()" style="padding:7px 16px;border-radius:12px;font-size:11px;font-weight:600;background:rgba(255,255,255,.04);color:#555;border:1px solid rgba(255,255,255,.06)">🔄</button></div>';
+  document.getElementById('app').innerHTML=h;
+  if(list.length>=2)try{drawWheel(list)}catch(e){}
+}
+
+function tapTag(k){activeTag=activeTag===k?null:k;render()}
+
+// 현재위치 갱신
+function relocate(){
+  if(!navigator.geolocation)return;
+  var btn=document.getElementById('locBtn');
+  if(btn){btn.style.opacity='.4';btn.textContent='⏳'}
+  navigator.geolocation.getCurrentPosition(
+    function(pos){
+      myLat=pos.coords.latitude;myLon=pos.coords.longitude;
+      xhrGet('https://nominatim.openstreetmap.org/reverse?format=json&lat='+myLat+'&lon='+myLon+'&zoom=16&accept-language=ko',6000,{'User-Agent':APP_NAME+'/'+APP_VER},function(err,status,text){
+        if(!err&&text){try{var d=JSON.parse(text).address||{};myAddr=d.borough||d.suburb||d.neighbourhood||d.town||d.city||d.county||myAddr;if(d.road)myAddr=d.road+', '+myAddr}catch(e){}}
+        forceRefresh=true;isLoading=true;S('위치 갱신...');doSearch();
+      });
+    },
+    function(){if(btn){btn.style.opacity='1';btn.textContent='📍'}alert('위치를 가져올 수 없습니다')},
+    {enableHighAccuracy:true,timeout:10000,maximumAge:0}
+  );
+}
+
+// ═══ 카페 검색 ═══
+var _cafeCallbacks={};
+function cafeSearchApi(lat,lon,rad,page,cb){
+  if(typeof Android!=='undefined'&&Android.cafeSearch){
+    var cbKey='cf_'+page+'_'+Date.now();
+    _cafeCallbacks[cbKey]=cb;
+    window['_onCafeResult_'+cbKey]=function(code,b64){
+      delete window['_onCafeResult_'+cbKey];
+      var fn=_cafeCallbacks[cbKey];delete _cafeCallbacks[cbKey];
+      if(!fn)return;
+      if(code<200||code>=300){fn('HTTP'+code);return}
+      if(!b64){fn('빈응답');return}
+      try{var d=JSON.parse(b64decode(b64));fn(null,d)}catch(e){fn('JSON오류')}
+    };
+    Android.cafeSearch(lat,lon,rad,page,'_onCafeResult_'+cbKey);
+    return;
+  }
+  cb('브릿지없음');
+}
+function searchCafe(){
+  if(!myLat||!myLon){alert('위치 정보가 없습니다');return}
+  if(rmap){rmap.remove();rmap=null}
+  var raEl=document.getElementById('ra');if(raEl)raEl.innerHTML='';
+  var searchRad=Math.min(Math.round(radius*1.2),20000);
+  showCafeLoading();
+  cafeSearchApi(myLat,myLon,searchRad,1,function(err,d1){
+    if(err){showCafeResult([],err);return}
+    var docs=d1.documents||[];
+    if(d1.meta&&!d1.meta.is_end&&docs.length>=15){
+      cafeSearchApi(myLat,myLon,searchRad,2,function(err2,d2){
+        if(!err2&&d2.documents)docs=docs.concat(d2.documents);
+        showCafeResult(parseCafeDocs(docs));
+      });
+    }else{showCafeResult(parseCafeDocs(docs))}
+  });
+}
+function parseCafeDocs(docs){
+  var res=[],seen={},i;
+  for(i=0;i<docs.length;i++){
+    try{
+      var d=docs[i],name=d.place_name;if(!name)continue;
+      name=name.replace(/\s+/g,' ').trim();
+      if(name.length<2||seen[name])continue;seen[name]=1;
+      // 편의점/마트 제외
+      if(/편의점|mart|GS25|CU|세븐일레븐|이마트/i.test(name))continue;
+      var lat=parseFloat(d.y),lon=parseFloat(d.x);if(!lat||!lon)continue;
+      var di=d.distance?parseInt(d.distance):Math.round(hav(myLat,myLon,lat,lon));
+      if(di>radius)continue;
+      res.push({name:name,di:di,lat:lat,lon:lon,phone:d.phone||'',addr:d.road_address_name||d.address_name||'',url:d.place_url||'',cat:d.category_name||''});
+    }catch(e){}
+  }
+  res.sort(function(a,b){return a.di-b.di});
+  return res;
+}
+function showCafeLoading(){
+  if(rmap){rmap.remove();rmap=null}
+  var raEl=document.getElementById('ra');if(raEl)raEl.innerHTML='';
+  document.getElementById('modal').innerHTML='<div class="modal"><div class="modal-box" style="text-align:center;padding:40px">'
+    +'<div style="font-size:36px">☕</div>'
+    +'<div class="ld"></div>'
+    +'<div style="font-size:12px;color:#666;margin-top:8px">주변 카페 검색 중...</div>'
+    +'</div></div>';
+}
+function showCafeResult(list,err){
+  if(rmap){rmap.remove();rmap=null}
+  var raEl=document.getElementById('ra');if(raEl)raEl.innerHTML='';
+  var rlb=radius>=1000?(radius/1000)+'km':radius+'m';
+  var h='<div class="modal" onclick="if(event.target===this)closeSettings()"><div class="modal-box" style="max-width:380px">'
+    +'<div style="font-size:16px;font-weight:900;color:#8B5E3C;margin-bottom:4px">☕ 주변 카페</div>'
+    +'<div style="font-size:10px;color:#555;margin-bottom:14px">반경 '+rlb+' · '+list.length+'곳</div>';
+  if(list.length===0){
+    if(err){h+='<div style="text-align:center;padding:30px 0"><div style="font-size:36px">⚠️</div><div style="font-size:13px;color:#E74C3C;margin-top:8px">카페 검색 중 오류가 발생했습니다</div><div style="font-size:10px;color:#555;margin-top:4px">'+esc(err)+'</div></div>'}
+    else{h+='<div style="text-align:center;padding:30px 0"><div style="font-size:36px">😅</div><div style="font-size:12px;color:#666;margin-top:8px">주변에 카페가 없습니다</div></div>'}
+  }else{
+    h+='<div style="max-height:55vh;overflow-y:auto">';
+    var mx=Math.min(list.length,30);
+    for(var i=0;i<mx;i++){
+      var c=list[i],dm=c.di>=1000?(c.di/1000).toFixed(1)+'km':c.di+'m';
+      var walkMin=Math.max(1,Math.round(c.di/67));
+      h+='<div onclick="openKakaoPlace(\''+esc(c.url)+'\')" style="display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer">';
+      h+='<span style="font-size:20px">☕</span>';
+      h+='<div style="flex:1;min-width:0">';
+      h+='<div style="font-size:12px;font-weight:700;color:#ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(c.name)+'</div>';
+      h+='<div style="font-size:9px;color:#666;margin-top:2px">'+esc(c.addr)+'</div>';
+      h+='</div>';
+      h+='<div style="text-align:right;flex-shrink:0">';
+      h+='<div style="font-size:11px;font-weight:700;color:#8B5E3C">'+dm+'</div>';
+      h+='<div style="font-size:9px;color:#555">도보 '+walkMin+'분</div>';
+      h+='</div></div>';
+    }
+    if(list.length>30)h+='<div style="text-align:center;font-size:9px;color:#444;padding:8px">외 '+(list.length-30)+'곳</div>';
+    h+='</div>';
+  }
+  h+='<button class="b" onclick="closeSettings()" style="display:block;width:100%;margin-top:14px;padding:10px;border-radius:12px;font-size:13px;font-weight:700;background:rgba(255,255,255,.06);color:#888">닫기</button>';
+  h+='</div></div>';
+  document.getElementById('modal').innerHTML=h;
+}
+
+// ═══ 검색 ═══
+var forceRefresh=false;
+function doSearch(){
+  _batchAborted=true;errorMsg='';
+  if(!isOnline()){errorMsg='인터넷연결확인';allR=[];isLoading=false;render();return}
+  if(!forceRefresh){var cached=loadC(myLat,myLon,radius);if(cached&&cached.length>0){
+    for(var ci=0;ci<cached.length;ci++){if(cached[ci].lat&&cached[ci].lon)cached[ci].di=Math.round(hav(myLat,myLon,cached[ci].lat,cached[ci].lon))}
+    allR=cached;
+    var needRating=false;for(ci=0;ci<allR.length;ci++){if(!allR[ci].rating&&allR[ci].url){needRating=true;break}}
+    if(needRating){S('평점 확인 중...');fetchBatchRatings(allR,function(){saveC(myLat,myLon,radius,allR);isLoading=false;render()})}
+    else{isLoading=false;render()}
+    return;
+  }}
+  forceRefresh=false;
+  var searchRad=Math.min(Math.round(radius*1.5),20000);
+  var lb=radius>=1000?(radius/1000)+'km':radius+'m';
+  S('반경 '+lb+' 맛집 검색 중...');
+  kakaoSearchAll(myLat,myLon,searchRad,function(err,docs){
+    if(err){_log('카카오오류:'+err);
+      allR=[];errorMsg=err;_initCalled=false;isLoading=false;render();return;
+    }
+    errorMsg='';allR=parseKakao(docs);
+    S('평점 확인 중... (0/'+allR.length+')');
+    fetchBatchRatings(allR,function(){
+      saveC(myLat,myLon,radius,allR);
+      isLoading=false;render();
+    });
+  });
+}
+
+// ═══ 업데이트 체크 ═══
+function checkUpdate(){
+  xhrGet(UPDATE_URL+'?t='+Date.now(),8000,{},function(err,status,text){
+    if(err||status!==200)return;
+    try{
+      var d=JSON.parse(text);
+      if(d.versionCode>APP_VCODE){
+        var h='<div class="modal" onclick="if(event.target===this)closeSettings()"><div class="modal-box" style="text-align:center;max-width:320px">'
+          +'<div style="font-size:40px;margin-bottom:8px">🆕</div>'
+          +'<div style="font-size:16px;font-weight:900;color:#FFD700;margin-bottom:4px">업데이트 안내</div>'
+          +'<div style="font-size:13px;color:#aaa;margin-bottom:6px">v'+d.versionName+' 출시!</div>'
+          +'<div style="font-size:11px;color:#888;margin-bottom:16px;line-height:1.6;white-space:pre-line">'+esc(d.releaseNotes||'')+'</div>'
+          +'<a href="'+esc(d.apkUrl||DOWNLOAD_URL)+'" style="display:inline-block;padding:12px 32px;border-radius:50px;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(135deg,#FFD700,#FF6B6B);text-decoration:none" '
+          +'onclick="if(typeof Android!==\'undefined\'&&Android.openExternal){Android.openExternal(\''+esc(d.apkUrl||DOWNLOAD_URL)+'\');return false}">다운로드</a>'
+          +'<div style="margin-top:12px"><button class="b" onclick="closeSettings()" style="font-size:12px;color:#555;background:none;padding:8px 16px">나중에</button></div>'
+          +'</div></div>';
+        document.getElementById('modal').innerHTML=h;
+      }
+    }catch(e){_log('updateCheck:'+e)}
+  });
+}
+
+// ═══ 시작 ═══
+window.onerror=function(msg,u,line){_log('err['+line+']:'+msg);return false};
+var _initCalled=false;
+function init(){
+  if(_initCalled)return;_initCalled=true;
+  isLoading=true;S('위치 확인 중...');
+  checkUpdate();
+  if(!isOnline()){document.getElementById('app').innerHTML='<div style="text-align:center;padding:80px 20px"><div style="font-size:48px">📡</div><div style="font-size:16px;font-weight:900;color:#FFD700;margin-top:10px">인터넷 연결 필요</div><button class="b" onclick="_initCalled=false;init()" style="margin-top:14px;padding:10px 28px;border-radius:25px;font-size:14px;font-weight:700;background:linear-gradient(135deg,#FFD700,#FF6B6B);color:#fff">다시 시도</button></div>';return}
+  if(!navigator.geolocation){showGpsErr();return}
+  navigator.geolocation.getCurrentPosition(
+    function(pos){
+      myLat=pos.coords.latitude;myLon=pos.coords.longitude;
+      myAddr=myLat.toFixed(3)+', '+myLon.toFixed(3);
+      xhrGet('https://nominatim.openstreetmap.org/reverse?format=json&lat='+myLat+'&lon='+myLon+'&zoom=16&accept-language=ko',6000,{'User-Agent':APP_NAME+'/'+APP_VER},function(err,status,text){
+        if(!err&&text){try{var d=JSON.parse(text).address||{};myAddr=d.borough||d.suburb||d.neighbourhood||d.town||d.city||d.county||myAddr;if(d.road)myAddr=d.road+', '+myAddr}catch(e){}}
+        doSearch();
+      });
+    },
+    function(){showGpsErr()},
+    {enableHighAccuracy:true,timeout:15000,maximumAge:120000}
+  );
+}
+function showGpsErr(){isLoading=false;_initCalled=false;document.getElementById('app').innerHTML='<div style="text-align:center;padding:80px 20px"><div style="font-size:48px">📍</div><div style="font-size:16px;font-weight:900;color:#FFD700;margin-top:10px">위치 권한 필요</div><div style="font-size:12px;color:#666;margin-top:8px;line-height:1.5">주변 맛집을 찾으려면<br>위치 접근을 허용해 주세요</div><button class="b" onclick="init()" style="margin-top:14px;padding:10px 28px;border-radius:25px;font-size:14px;font-weight:700;background:linear-gradient(135deg,#FFD700,#FF6B6B);color:#fff">다시 시도</button></div>'}
+init();
+</script>
+</body>
+</html>
