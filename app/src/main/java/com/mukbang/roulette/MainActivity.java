@@ -100,13 +100,13 @@ public class MainActivity extends Activity {
         return fn != null && SAFE_CB.matcher(fn).matches();
     }
 
-    /** Safely invoke JS callback via main thread */
+    /** Safely invoke JS callback via main thread (evaluateJavascript handles large payloads better than javascript: URLs) */
     private void invokeCallback(final String fn, final int code, final String b64) {
         mainHandler.post(new Runnable() {
             @Override
             public void run() {
                 if (webView != null) {
-                    webView.loadUrl("javascript:try{" + fn + "(" + code + ",'" + b64 + "')}catch(e){}");
+                    webView.evaluateJavascript("try{" + fn + "(" + code + ",'" + b64 + "')}catch(e){}", null);
                 }
             }
         });
@@ -165,21 +165,28 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    /** Kakao API category search (shared by food/cafe) */
+    private static String[] kakaoHeaders() {
+        return new String[]{
+            "Authorization", "KakaoAK " + BuildConfig.KAKAO_API_KEY,
+            "User-Agent", "MukbangRoulette/" + BuildConfig.VERSION_NAME
+        };
+    }
+
+    /** Kakao API category search (FD6 = food, CE7 = cafe) */
     private void categorySearch(String categoryCode, double lat, double lon,
-                                int rad, int page, String callbackFn) {
+                                int rad, int page, String sort, String callbackFn) {
         if (!isSafeCallback(callbackFn)) return;
+        if (!"FD6".equals(categoryCode) && !"CE7".equals(categoryCode)) return;
+        if (!"distance".equals(sort)) sort = "accuracy";
+        rad = Math.max(1, Math.min(rad, 20000));
+        page = Math.max(1, Math.min(page, 45));
         String apiUrl = "https://dapi.kakao.com/v2/local/search/category.json"
                 + "?category_group_code=" + categoryCode
                 + "&x=" + lon + "&y=" + lat
                 + "&radius=" + rad
                 + "&size=15&page=" + page
-                + "&sort=accuracy";
-        String[] headers = {
-            "Authorization", "KakaoAK " + BuildConfig.KAKAO_API_KEY,
-            "User-Agent", "MukbangRoulette/" + BuildConfig.VERSION_NAME
-        };
-        httpFetch(apiUrl, headers, 10000, 10000, false, callbackFn);
+                + "&sort=" + sort;
+        httpFetch(apiUrl, kakaoHeaders(), 10000, 10000, false, callbackFn);
     }
 
     private void setupWebView() {
@@ -266,13 +273,24 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void kakaoSearch(double lat, double lon, int rad, int page, String callbackFn) {
-            categorySearch("FD6", lat, lon, rad, page, callbackFn);
+        public void categorySearch(String code, double lat, double lon, int rad, int page,
+                                   String sort, String callbackFn) {
+            MainActivity.this.categorySearch(code, lat, lon, rad, page, sort, callbackFn);
         }
 
+        /** Coordinates -> address (Kakao coord2address) */
         @JavascriptInterface
-        public void cafeSearch(double lat, double lon, int rad, int page, String callbackFn) {
-            categorySearch("CE7", lat, lon, rad, page, callbackFn);
+        public void reverseGeocode(double lat, double lon, String callbackFn) {
+            if (!isSafeCallback(callbackFn)) return;
+            String apiUrl = "https://dapi.kakao.com/v2/local/geo/coord2address.json"
+                    + "?x=" + lon + "&y=" + lat;
+            httpFetch(apiUrl, kakaoHeaders(), 6000, 6000, false, callbackFn);
+        }
+
+        /** false for the Google Play build: updates come from the store */
+        @JavascriptInterface
+        public boolean selfUpdateEnabled() {
+            return BuildConfig.SELF_UPDATE;
         }
 
         @JavascriptInterface
@@ -282,11 +300,7 @@ public class MainActivity extends Activity {
                 String apiUrl = "https://dapi.kakao.com/v2/search/blog"
                         + "?query=" + URLEncoder.encode(query, "UTF-8")
                         + "&size=5";
-                String[] headers = {
-                    "Authorization", "KakaoAK " + BuildConfig.KAKAO_API_KEY,
-                    "User-Agent", "MukbangRoulette/" + BuildConfig.VERSION_NAME
-                };
-                httpFetch(apiUrl, headers, 8000, 8000, false, callbackFn);
+                httpFetch(apiUrl, kakaoHeaders(), 8000, 8000, false, callbackFn);
             } catch (Exception e) {
                 invokeCallback(callbackFn, ERR_UNKNOWN, "");
             }

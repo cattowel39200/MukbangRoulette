@@ -28,16 +28,17 @@
 🎰 오늘 뭐 먹지? - 맛집 룰렛
 
 매일 반복되는 메뉴 고민, 이제 룰렛에 맡기세요!
-현재 위치에서 반경 1.5km 이내 맛집을 자동으로 찾아 룰렛으로 골라줍니다.
+현재 위치에서 반경 1km 이내 맛집을 빠짐없이 찾아 룰렛으로 골라줍니다.
 
 ━━━━━━━━━━━━━━━━━━━━
 
 🎲 핵심 기능
 
 ▸ 원터치 맛집 룰렛
-  - 앱을 열면 주변 맛집을 자동 검색
+  - 앱을 열면 주변 맛집을 자동 검색 (맛집 밀집 지역은 구역별로 나눠 검색)
   - '돌려!' 버튼 한 번으로 오늘의 맛집 결정
-  - 카카오맵 평점 기반 인기 맛집일수록 당첨 확률 UP
+  - 평점·리뷰 수를 보정한 점수로 진짜 맛집일수록 당첨 확률 UP
+  - 리뷰 많은 체인점이 독식하지 않도록 확률 차이는 최대 3배로 제한
 
 ▸ 똑똑한 태그 필터
   - 메뉴별: 고기, 면, 국/탕, 치킨, 돈까스, 양식
@@ -73,15 +74,15 @@
 
 🔒 개인정보 보호
 
-• 위치 정보는 맛집 검색에만 사용됩니다
-• 서버 저장 없음 — 모든 데이터는 기기에만 저장
+• 위치 정보는 맛집 검색에만 사용됩니다 (검색을 위해 카카오로 전송)
+• 앱 운영 서버 없음 — 즐겨찾기·기록은 기기에만 저장
 • 앱 삭제 시 모든 데이터가 함께 삭제
 • 회원가입 없이 바로 사용
 
 ━━━━━━━━━━━━━━━━━━━━
 
 📡 데이터 출처: 카카오맵 (실시간, 폐업 업체 자동 제거)
-📍 검색 반경: 현재 위치 기준 1.5km
+📍 검색 반경: 현재 위치 기준 1km
 🚫 맛집 룰렛에서 카페/편의점 자동 제외 (카페는 별도 검색)
 
 문의: mukbang.roulette.app@gmail.com
@@ -140,8 +141,8 @@
 | 도박 | 없음 (룰렛은 음식점 선택 UI이며 금전 거래 없음) |
 | 사용자 생성 콘텐츠 | 없음 |
 | 사용자 간 상호작용 | 없음 |
-| 위치 공유 | 기기 내에서만 사용 (제3자 공유 없음) |
-| 개인정보 수집 | 위치 정보 (기기 내 처리만, 서버 미전송) |
+| 위치 공유 | 다른 사용자와 공유 없음 (검색을 위해 카카오 API로만 전송) |
+| 개인정보 수집 | 위치 정보 (검색·주소 변환을 위해 카카오 API로 전송, 운영자 서버 없음·미보관) |
 
 ---
 
@@ -151,9 +152,9 @@
 
 | 권한 | 설명 (Google Play Console에 입력) |
 |------|-----------------------------------|
-| `ACCESS_FINE_LOCATION` | 현재 위치 기준 반경 1.5km 내 음식점을 검색하기 위해 GPS 위치를 사용합니다. 위치 데이터는 서버에 전송되지 않으며 기기에서만 처리됩니다. |
+| `ACCESS_FINE_LOCATION` | 현재 위치 기준 반경 1km 내 음식점을 검색하기 위해 GPS 위치를 사용합니다. 위치 좌표는 검색과 주소 변환을 위해 카카오 로컬 API로만 전송되며, 앱 운영자는 이를 저장하지 않습니다. |
 | `ACCESS_COARSE_LOCATION` | GPS가 불가능한 환경에서 대략적 위치를 사용하여 음식점 검색을 제공합니다. |
-| `INTERNET` | 카카오맵 API를 통한 음식점/카페 검색, 지도 타일 로딩, 주소 변환에 사용됩니다. |
+| `INTERNET` | 카카오 로컬 API를 통한 음식점/카페 검색·주소 변환, 지도 타일 로딩에 사용됩니다. |
 | `ACCESS_NETWORK_STATE` | 인터넷 연결 여부를 확인하여 오프라인 상태에서 적절한 안내를 표시합니다. |
 | `VIBRATE` | 룰렛 회전 중 햅틱 피드백을 제공합니다. |
 
@@ -161,7 +162,7 @@
 
 ## 개인정보처리방침
 
-- **URL**: (GitHub Pages 또는 웹 호스팅에 privacy_policy.html 업로드 필요)
+- **URL**: https://cattowel39200.github.io/MukbangRoulette/privacy_policy.html (`docs/privacy_policy.html`, main 반영 후 게시됨)
 - **로컬 파일**: `app/src/main/assets/privacy_policy.html`
 - **이메일**: mukbang.roulette.app@gmail.com
 
@@ -190,7 +191,9 @@
 |-------------|-----------|-----------|-----------|------|
 | 대략적 위치 | 예 | 아니오 | 예 | 앱 기능 |
 | 정확한 위치 | 예 | 아니오 | 예 | 앱 기능 |
-| 앱 활동 (앱 내 검색기록) | 예 | 아니오 | 아니오 | 앱 기능 |
+| 앱 활동 (앱 내 검색기록) | 아니오 (기기에만 저장) | 아니오 | 아니오 | 앱 기능 |
+
+> 위치는 기기 밖(카카오 API)으로 전송되므로 Play 기준 "수집"에 해당. 기능 제공을 위한 서비스 제공자 전송은 "공유"가 아님.
 
 ### 보안 관행
 
@@ -231,7 +234,9 @@
 - [ ] **512x512 앱 아이콘** 제작
 - [ ] **1024x500 그래픽 이미지** 제작
 - [ ] **스크린샷 5~8장** 캡처
-- [ ] 개인정보처리방침 **URL 호스팅**
+- [x] 개인정보처리방침 **URL 호스팅** (`docs/privacy_policy.html`, main 병합 후 Pages 게시 확인 필요)
+- [ ] **카카오 REST API 키 재발급** (이전 키는 git 이력에 노출됨) → `local.properties`에 입력
+- [ ] **서명 키 비밀번호 확인** (이전 비밀번호가 git 이력에 노출됨, 키 파일 자체는 커밋된 적 없음)
 - [ ] Google Play Console 개발자 계정 ($25 일회성)
 - [ ] 콘텐츠 등급 질문지 제출
 - [ ] 데이터 보안 섹션 작성
@@ -241,14 +246,20 @@
 
 ## 빌드 명령어
 
+사전 준비: `local.properties.example`을 `local.properties`로 복사하고 `KAKAO_API_KEY`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_PASSWORD` 입력 (`app/release.jks` 필요).
+
 ```bash
 cd MukbangRoulette
-JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew clean :app:assembleRelease :app:bundleRelease
+JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew clean :app:assembleGithubRelease :app:bundlePlayRelease
 ```
 
-출력:
-- APK: `app/build/outputs/apk/release/app-release.apk` → `MukbangRoulette-v2.7.1.apk`
-- AAB: `app/build/outputs/bundle/release/app-release.aab` → `MukbangRoulette-v2.7.1.aab` (Google Play 제출용)
+| 빌드 | 용도 | 앱 내 업데이트 안내 | 출력 |
+|------|------|------------------|------|
+| `github` | GitHub Pages APK 배포 | 사용 (`docs/version.json`) | `app/build/outputs/apk/github/release/app-github-release.apk` → `docs/app-release.apk`로 복사 |
+| `play` | Google Play 제출 | 끔 (스토어 정책) | `app/build/outputs/bundle/playRelease/app-play-release.aab` |
+
+GitHub 배포 순서: APK 빌드 → `docs/app-release.apk` 교체 → `docs/version.json`의 `versionCode`/`versionName`/`releaseNotes` 갱신 → main에 push.
+(version.json을 APK보다 먼저 올리면 기존 사용자가 구버전 APK를 받게 되므로 반드시 함께 커밋)
 
 ---
 
@@ -256,8 +267,10 @@ JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew clean :app:ass
 
 | 버전 | versionCode | 변경 내용 |
 |------|-------------|-----------|
+| 2.10.0 | 8 | 추천 점수 개편(평점 보정·리뷰 수 로그 반영·확률 차 최대 3배), 밀집 지역 구역 분할 검색(45곳 상한 해소), 평점 동시 조회·캐시 수정, 상황 태그 폴백, 결과 혼선 버그 수정, 주소 변환 카카오로 교체, Leaflet 내장, 비밀값 분리, github/play 빌드 분리, 개인정보 문구 정정, 글자 크기 확대 |
+| 2.9.0 | 7 | 맛집 우선순위 추천 (인기/평점 기반 정렬), 검색 범위 확대 |
 | 2.7.1 | 5 | 네이티브 브릿지 동기화, 에러 세분화, 뒤로가기 모달 처리, isOnline/clearCache 추가, 코드 중복 제거 |
 | 2.7.0 | 4 | 카페 검색 추가, R8 난독화, targetSdk 35, 리소스 축소 |
 | 2.6.1 | 3 | 메뉴 로딩 개선, 필터 수정, 보안 강화, 사용 가이드 추가 |
 
-> 다음 업데이트 시 versionCode를 반드시 6 이상으로 올릴 것
+> 다음 업데이트 시 versionCode를 반드시 9 이상으로 올릴 것

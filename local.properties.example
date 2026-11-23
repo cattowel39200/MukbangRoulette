@@ -1,0 +1,14 @@
+# local.properties.example → local.properties 로 복사 후 값 입력 (local.properties는 git에 올라가지 않음)
+# 환경변수로 같은 이름을 지정해도 됩니다 (CI용).
+
+# Android SDK 경로 (Android Studio가 자동 생성)
+# sdk.dir=C\:\\Users\\<user>\\AppData\\Local\\Android\\Sdk
+
+# 카카오 REST API 키 (재발급한 새 키를 넣을 것)
+KAKAO_API_KEY=
+
+# 릴리스 서명 (app/release.jks 기준 상대경로)
+RELEASE_STORE_FILE=release.jks
+RELEASE_STORE_PASSWORD=
+RELEASE_KEY_ALIAS=mukbang-roulette
+RELEASE_KEY_PASSWORD=
